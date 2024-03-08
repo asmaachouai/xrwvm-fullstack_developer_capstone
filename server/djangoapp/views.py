@@ -6,6 +6,7 @@ from django.contrib.auth import logout
 from django.contrib import messages
 from datetime import datetime
 from .models import CarMake, CarModel
+from .restapis import get_request, analyze_review_sentiments, post_review
 
 from django.http import JsonResponse
 from django.contrib.auth import login, authenticate
@@ -97,19 +98,75 @@ def get_cars(request):
     
     # Return a JSON response containing car data
     return JsonResponse({"CarModels": cars})
-# # Update the `get_dealerships` view to render the index page with
-# a list of dealerships
-# def get_dealerships(request):
-# ...
+#Update the `get_dealerships` view to render the index page with
+#Update the `get_dealerships` render list of dealerships all by default, particular state if state is passed
+def get_dealerships(request, state="All"):
+    if(state == "All"):
+        endpoint = "/fetchDealers"
+    else:
+        endpoint = "/fetchDealers/"+state
+    dealerships = get_request(endpoint)
+    return JsonResponse({"status":200,"dealers":dealerships})
 
-# Create a `get_dealer_reviews` view to render the reviews of a dealer
-# def get_dealer_reviews(request,dealer_id):
-# ...
+# Function to retrieve dealer details
+def get_dealer_details(request, dealer_id):
+    # Check if dealer_id is provided
+    if dealer_id:
+        # Construct the endpoint for fetching dealer details
+        endpoint = "/fetchDealer/" + str(dealer_id)
+        
+        # Make a GET request to fetch dealership details
+        dealership = get_request(endpoint)
+        
+        # Return JSON response with status 200 and dealer details
+        return JsonResponse({"status": 200, "dealer": dealership})
+    else:
+        # Return JSON response with status 400 and error message for bad request
+        return JsonResponse({"status": 400, "message": "Bad Request"})
+    
+# Function to retrieve dealer reviews
+def get_dealer_reviews(request, dealer_id):
+    # Check if dealer_id is provided
+    if dealer_id:
+        # Construct the endpoint for fetching dealer reviews
+        endpoint = "/fetchReviews/dealer/" + str(dealer_id)
+        
+        # Make a GET request to fetch reviews
+        reviews = get_request(endpoint)
+        
+        # Iterate over each review and analyze its sentiment
+        for review_detail in reviews:
+            # Analyze sentiment of the review
+            response = analyze_review_sentiments(review_detail['review'])
+            
+            # Print the sentiment response (for debugging purposes)
+            print(response)
+            
+            # Add sentiment information to the review detail
+            review_detail['sentiment'] = response['sentiment']
+        
+        # Return JSON response with status 200 and reviews
+        return JsonResponse({"status": 200, "reviews": reviews})
+    else:
+        # Return JSON response with status 400 and error message for bad request
+        return JsonResponse({"status": 400, "message": "Bad Request"})
 
-# Create a `get_dealer_details` view to render the dealer details
-# def get_dealer_details(request, dealer_id):
-# ...
-
-# Create a `add_review` view to submit a review
-# def add_review(request):
-# ...
+# Function to add a review
+def add_review(request):
+    # Check if the user is authenticated
+    if not request.user.is_anonymous:
+        # Load JSON data from the request body
+        data = json.loads(request.body)
+        
+        try:
+            # Try to post the review using the post_review function
+            response = post_review(data)
+            
+            # If successful, return a JSON response with status 200
+            return JsonResponse({"status": 200})
+        except Exception as e:
+            # If an error occurs during posting the review, return a JSON response with status 401 and error message
+            return JsonResponse({"status": 401, "message": "Error in posting review"})
+    else:
+        # If the user is anonymous, return a JSON response with status 403 and error message
+        return JsonResponse({"status": 403, "message": "Unauthorized"})
